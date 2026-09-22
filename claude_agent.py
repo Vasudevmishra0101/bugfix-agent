@@ -1,3 +1,5 @@
+import re
+
 from openai import OpenAI
 
 import config
@@ -7,8 +9,18 @@ client = OpenAI(
     api_key=config.OPENROUTER_API_KEY,
 )
 
+_FENCE_RE = re.compile(r"^```[a-zA-Z0-9_+-]*\n(.*)\n```$", re.DOTALL)
 
-def _chat(system_prompt, user_prompt):
+
+def _strip_code_fences(text):
+    """Free-tier models routinely wrap output in ```lang ... ``` fences
+    despite being told not to; strip them so callers get raw code/diff."""
+    stripped = text.strip()
+    match = _FENCE_RE.match(stripped)
+    return match.group(1) if match else stripped
+
+
+def _chat(system_prompt, user_prompt, strip_fences=False):
     response = client.chat.completions.create(
         model=config.MODEL,
         messages=[
@@ -16,7 +28,8 @@ def _chat(system_prompt, user_prompt):
             {"role": "user", "content": user_prompt},
         ],
     )
-    return response.choices[0].message.content
+    content = response.choices[0].message.content
+    return _strip_code_fences(content) if strip_fences else content
 
 
 def analyze_bug(issue_title, issue_body, context_block):
@@ -48,7 +61,7 @@ def generate_patch(issue_title, issue_body, context_block, root_cause_analysis):
         f"Root cause analysis:\n{root_cause_analysis}\n\n"
         f"Relevant code:\n{context_block}"
     )
-    return _chat(system_prompt, user_prompt)
+    return _chat(system_prompt, user_prompt, strip_fences=True)
 
 
 def generate_tests(issue_title, issue_body, patch_diff, context_block):
@@ -65,7 +78,7 @@ def generate_tests(issue_title, issue_body, patch_diff, context_block):
         f"Patch:\n{patch_diff}\n\n"
         f"Relevant code:\n{context_block}"
     )
-    return _chat(system_prompt, user_prompt)
+    return _chat(system_prompt, user_prompt, strip_fences=True)
 
 
 def revise_patch_from_comment(issue_title, patch_diff, review_comment, context_block):
@@ -87,4 +100,4 @@ def revise_patch_from_comment(issue_title, patch_diff, review_comment, context_b
         f"Reviewer comment:\n{review_comment}\n\n"
         f"Relevant code:\n{context_block}"
     )
-    return _chat(system_prompt, user_prompt)
+    return _chat(system_prompt, user_prompt, strip_fences=True)
