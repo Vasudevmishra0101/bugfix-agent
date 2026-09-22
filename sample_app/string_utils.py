@@ -13,4 +13,4 @@ def count_vowels(text):
 
 def title_case(text):
     """Capitalize the first letter of every word in text."""
-    return " ".join(word[:1] + word[1:] for word in text.split(" "))
+    return " ".join(word[:1].upper() + word[1:] for word in text.split(" "))
