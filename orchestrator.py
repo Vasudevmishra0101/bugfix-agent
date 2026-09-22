@@ -245,6 +245,8 @@ def process_issue(issue, auto_push=True):
         "tests_passed_count_before": None, "tests_failed_count_before": None,
         "tests_passed_count_after": None, "tests_failed_count_after": None,
         "patch_applied": False, "pr_number": None, "pr_url": None,
+        "pr_state": None, "pr_merged": False, "review_status": "pending",
+        "plain_bug": None, "plain_fix": None,
         "outcome": None,
     }
 
@@ -304,11 +306,25 @@ def process_issue(issue, auto_push=True):
 
     print("Tests pass after the patch. Fix verified.")
 
+    print("\n--- Plain-language explanation (for the dashboard) ---")
+    try:
+        raw_explanation = claude_agent.explain_simply(issue.title, analysis, patch)
+        explanation = json.loads(raw_explanation)
+        record["plain_bug"] = explanation.get("plain_bug")
+        record["plain_fix"] = explanation.get("plain_fix")
+        print(record["plain_bug"])
+        print(record["plain_fix"])
+    except Exception as e:
+        print(f"(non-fatal) couldn't generate plain-language explanation: {e}")
+        record["plain_bug"] = None
+        record["plain_fix"] = None
+
     if auto_push:
         result["pr"] = open_pr_for_fix(issue, analysis, target_file, test_file_path)
         if result["pr"]:
             record["pr_number"] = result["pr"].number
             record["pr_url"] = result["pr"].html_url
+            record["pr_state"] = "open"
             record["outcome"] = "pr_opened"
         else:
             record["outcome"] = "push_or_pr_failed"

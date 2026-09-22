@@ -81,6 +81,28 @@ def generate_tests(issue_title, issue_body, patch_diff, context_block):
     return _chat(system_prompt, user_prompt, strip_fences=True)
 
 
+def explain_simply(issue_title, analysis, patch_diff):
+    """Plain-language bug + fix summary for a non-technical audience (the
+    live dashboard shows this instead of the raw diff/analysis)."""
+    system_prompt = (
+        "You explain software bugs to a non-technical audience (e.g. a "
+        "product manager or a recruiter watching a demo). Given a bug "
+        "title, a technical root-cause analysis, and the code patch that "
+        "fixed it, write two short plain-language explanations. No jargon, "
+        "no code, no file names, no function names — describe the "
+        "user-visible behavior only. 1-3 short sentences each. "
+        "Respond with only a JSON object: "
+        '{"plain_bug": "<what was wrong, in plain language>", '
+        '"plain_fix": "<how it was fixed, in plain language>"}.'
+    )
+    user_prompt = (
+        f"Bug title: {issue_title}\n\n"
+        f"Technical root cause:\n{analysis}\n\n"
+        f"Patch:\n{patch_diff}"
+    )
+    return _chat(system_prompt, user_prompt, strip_fences=True)
+
+
 def revise_patch_from_comment(issue_title, patch_diff, review_comment, context_block):
     system_prompt = (
         "You are a senior software engineer responding to code review "
