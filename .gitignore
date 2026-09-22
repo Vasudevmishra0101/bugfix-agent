@@ -3,4 +3,3 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-test_generated_issue_*.py

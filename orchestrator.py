@@ -30,12 +30,48 @@ def _run_git(args):
     return result.returncode == 0, (result.stdout + result.stderr)
 
 
-def apply_patch(patch_diff):
+def _naive_line_replace(patch_diff, target_file):
+    """Last-resort fallback: extract the removed/added line blocks from the
+    diff, ignoring line numbers and context entirely, and do an exact text
+    substitution in the target file. Handles the common case this free
+    model keeps producing — a correct single-hunk change wrapped in a diff
+    whose context lines don't quite match (e.g. a dropped blank line) —
+    without needing the surrounding context to line up at all. Only applies
+    when the removed block appears exactly once, so it can't silently patch
+    the wrong spot."""
+    removed, added = [], []
+    for line in patch_diff.splitlines():
+        if line.startswith("-") and not line.startswith("---"):
+            removed.append(line[1:])
+        elif line.startswith("+") and not line.startswith("+++"):
+            added.append(line[1:])
+    if not removed:
+        return False, "no removed lines found in patch"
+
+    removed_block = "\n".join(removed)
+    added_block = "\n".join(added)
+
+    with open(target_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    count = content.count(removed_block)
+    if count != 1:
+        return False, (
+            f"removed block found {count} time(s) in {target_file}, "
+            f"need exactly 1 to apply safely"
+        )
+
+    with open(target_file, "w", encoding="utf-8") as f:
+        f.write(content.replace(removed_block, added_block, 1))
+    return True, "applied via naive line-replace fallback"
+
+
+def apply_patch(patch_diff, target_file=None):
     """Free-tier models frequently produce diffs with slightly-off context
-    (e.g. a dropped blank line) that are still unambiguous fixes. Try strict
-    `git apply` first; if that fails, fall back to classic GNU `patch` with
-    fuzz, which tolerates that kind of drift via approximate context
-    matching instead of requiring an exact line-for-line match."""
+    (e.g. a dropped blank line) that are still unambiguous fixes. Try
+    strict `git apply` first, then classic GNU `patch` with fuzz (tolerates
+    that drift via approximate context matching), then a naive exact-text
+    line-replace as a last resort."""
     patch_file = ".patchpilot_tmp.patch"
     with open(patch_file, "w", encoding="utf-8", newline="\n") as f:
         f.write(patch_diff if patch_diff.endswith("\n") else patch_diff + "\n")
@@ -44,7 +80,7 @@ def apply_patch(patch_diff):
     if ok:
         os.remove(patch_file)
         return True, output
-    git_output = output
+    combined_output = output
 
     patch_exe = os.path.join(
         os.environ.get("ProgramFiles", "C:\\Program Files"),
@@ -56,13 +92,23 @@ def apply_patch(patch_diff):
              "-i", patch_file],
             capture_output=True, text=True,
         )
+        reject_file = f"{target_file}.rej" if target_file else None
         if result.returncode == 0:
             os.remove(patch_file)
             return True, f"(git apply failed, patch --fuzz succeeded)\n{result.stdout}"
-        git_output += f"\n--- patch --fuzz also failed ---\n{result.stdout}{result.stderr}"
+        if reject_file and os.path.exists(reject_file):
+            os.remove(reject_file)
+        combined_output += f"\n--- patch --fuzz also failed ---\n{result.stdout}{result.stderr}"
 
     os.remove(patch_file)
-    return False, git_output
+
+    if target_file:
+        ok, naive_output = _naive_line_replace(patch_diff, target_file)
+        if ok:
+            return True, f"(git apply and patch --fuzz failed) {naive_output}"
+        combined_output += f"\n--- naive line-replace also failed ---\n{naive_output}"
+
+    return False, combined_output
 
 
 def open_pr_for_fix(issue, analysis, target_file, test_file_path):
@@ -165,7 +211,7 @@ def process_issue(issue, auto_push=True):
         return result
 
     print("\n--- Applying patch ---")
-    applied, apply_output = apply_patch(patch)
+    applied, apply_output = apply_patch(patch, target_file)
     print(apply_output or "(applied cleanly)")
     result["patch_applied"] = applied
     if not applied:
@@ -209,7 +255,7 @@ def _apply_revision(branch_name, target_file, revised_patch):
         return False
 
     _run_git(["checkout", "main", "--", target_file])
-    applied, apply_output = apply_patch(revised_patch)
+    applied, apply_output = apply_patch(revised_patch, target_file)
     if not applied:
         print(f"Revised patch failed to apply:\n{apply_output}")
         _run_git(["checkout", "HEAD", "--", target_file])
