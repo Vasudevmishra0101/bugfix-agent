@@ -1,0 +1,28 @@
+[
+  {
+    "issue_number": 1,
+    "issue_title": "count_vowels() undercounts vowels in uppercase text",
+    "started_at": "2026-09-22T00:00:00+00:00",
+    "model": "cohere/north-mini-code:free",
+    "tests_generated": 4,
+    "tests_passed_before": false,
+    "tests_passed_after": true,
+    "patch_applied": true,
+    "pr_number": 2,
+    "pr_url": "https://github.com/Vasudevmishra0101/bugfix-agent/pull/2",
+    "outcome": "pr_opened"
+  },
+  {
+    "issue_number": 3,
+    "issue_title": "title_case() does not capitalize words",
+    "started_at": "2026-09-22T00:30:00+00:00",
+    "model": "cohere/north-mini-code:free",
+    "tests_generated": 3,
+    "tests_passed_before": false,
+    "tests_passed_after": true,
+    "patch_applied": true,
+    "pr_number": 4,
+    "pr_url": "https://github.com/Vasudevmishra0101/bugfix-agent/pull/4",
+    "outcome": "pr_opened"
+  }
+]
