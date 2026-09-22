@@ -8,7 +8,7 @@ def is_palindrome(text):
 def count_vowels(text):
     """Return the number of vowels (a, e, i, o, u) in text, case-insensitive."""
     vowels = set("aeiou")
-    return sum(1 for ch in text if ch in vowels)
+    return sum(1 for ch in text if ch.lower() in vowels)
 
 
 def title_case(text):
