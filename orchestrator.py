@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import re
@@ -11,6 +12,33 @@ import github_client
 import test_runner
 
 _PATCH_TARGET_RE = re.compile(r"^\+\+\+ b/(.+)$", re.MULTILINE)
+_RUNS_LOG_PATH = "pipeline_runs.json"
+
+
+def _log_run(record):
+    """Append one run record to pipeline_runs.json on main via the GitHub
+    API (not local git — this should land regardless of what branch the
+    working tree is currently on). Powers the live dashboard; best-effort
+    only, never lets a logging failure break the pipeline itself."""
+    try:
+        repo = github_client._repo
+        try:
+            contents = repo.get_contents(_RUNS_LOG_PATH, ref="main")
+            runs = json.loads(contents.decoded_content.decode("utf-8"))
+            sha = contents.sha
+        except Exception:
+            runs = []
+            sha = None
+
+        runs.append(record)
+
+        body = json.dumps(runs, indent=2)
+        if sha:
+            repo.update_file(_RUNS_LOG_PATH, "Log pipeline run", body, sha, branch="main")
+        else:
+            repo.create_file(_RUNS_LOG_PATH, "Log pipeline run", body, branch="main")
+    except Exception as e:
+        print(f"(non-fatal) failed to log run telemetry: {e}")
 
 
 def _target_file_from_patch(patch_diff):
@@ -163,6 +191,7 @@ def process_issue(issue, auto_push=True):
     the pipeline's proof the fix is real before a human ever looks at it.
     A human is still the merge gate; nothing here auto-merges."""
     print(f"\n=== Issue #{issue.number}: {issue.title} ===")
+    started_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     relevant_files = code_context.find_relevant_files(issue.title, issue.body or "")
     context_block = code_context.format_context_block(relevant_files)
@@ -194,50 +223,78 @@ def process_issue(issue, auto_push=True):
         "tests_passed_before": None, "tests_passed_after": None,
         "patch_applied": False, "pr": None,
     }
+    record = {
+        "issue_number": issue.number, "issue_title": issue.title,
+        "started_at": started_at, "model": config.MODEL,
+        "tests_generated": tests.count("def test_"),
+        "tests_passed_before": None, "tests_passed_after": None,
+        "patch_applied": False, "pr_number": None, "pr_url": None,
+        "outcome": None,
+    }
 
     print(f"\n--- Running generated tests against unpatched code ({test_file_path}) ---")
     passed_before, output_before = test_runner.run_tests(test_file_path)
     print(output_before)
     result["tests_passed_before"] = passed_before
+    record["tests_passed_before"] = passed_before
     if passed_before:
         print("WARNING: tests already pass without the patch — they may not "
               "actually cover the bug. Skipping auto-push for human review.")
+        record["outcome"] = "tests_already_passed"
+        _log_run(record)
         return result
     print("Tests fail on unpatched code, as expected.")
 
     if not target_file:
         print("Could not determine target file from patch header; "
               "skipping apply/push.")
+        record["outcome"] = "no_target_file"
+        _log_run(record)
         return result
 
     print("\n--- Applying patch ---")
     applied, apply_output = apply_patch(patch, target_file)
     print(apply_output or "(applied cleanly)")
     result["patch_applied"] = applied
+    record["patch_applied"] = applied
     if not applied:
         print("Patch failed to apply. Leaving working tree untouched for "
               "human review.")
         os.remove(test_file_path)
+        record["outcome"] = "patch_apply_failed"
+        _log_run(record)
         return result
 
     print("\n--- Running generated tests against patched code ---")
     passed_after, output_after = test_runner.run_tests(test_file_path)
     print(output_after)
     result["tests_passed_after"] = passed_after
+    record["tests_passed_after"] = passed_after
 
     if not passed_after:
         print("Tests still fail after applying the patch — the fix is not "
               "verified. Reverting and skipping PR.")
         _run_git(["checkout", "--", target_file])
         os.remove(test_file_path)
+        record["outcome"] = "fix_not_verified"
+        _log_run(record)
         return result
 
     print("Tests pass after the patch. Fix verified.")
 
     if auto_push:
         result["pr"] = open_pr_for_fix(issue, analysis, target_file, test_file_path)
+        if result["pr"]:
+            record["pr_number"] = result["pr"].number
+            record["pr_url"] = result["pr"].html_url
+            record["outcome"] = "pr_opened"
+        else:
+            record["outcome"] = "push_or_pr_failed"
     else:
         print("auto_push=False: leaving verified changes uncommitted locally.")
+        record["outcome"] = "verified_no_push"
+
+    _log_run(record)
 
     result["context_block"] = context_block
     result["target_file"] = target_file
