@@ -15,6 +15,20 @@ _PATCH_TARGET_RE = re.compile(r"^\+\+\+ b/(.+)$", re.MULTILINE)
 _RUNS_LOG_PATH = "pipeline_runs.json"
 
 
+def _parse_pytest_counts(pytest_output):
+    """Pull (passed, failed) out of pytest's own summary line so telemetry
+    reflects real per-test counts, not just an overall pass/fail bool."""
+    for line in reversed(pytest_output.splitlines()):
+        if "passed" in line or "failed" in line:
+            passed_match = re.search(r"(\d+) passed", line)
+            failed_match = re.search(r"(\d+) failed", line)
+            passed = int(passed_match.group(1)) if passed_match else 0
+            failed = int(failed_match.group(1)) if failed_match else 0
+            if passed_match or failed_match:
+                return passed, failed
+    return None, None
+
+
 def _log_run(record):
     """Append one run record to pipeline_runs.json on main via the GitHub
     API (not local git — this should land regardless of what branch the
@@ -228,6 +242,8 @@ def process_issue(issue, auto_push=True):
         "started_at": started_at, "model": config.MODEL,
         "tests_generated": tests.count("def test_"),
         "tests_passed_before": None, "tests_passed_after": None,
+        "tests_passed_count_before": None, "tests_failed_count_before": None,
+        "tests_passed_count_after": None, "tests_failed_count_after": None,
         "patch_applied": False, "pr_number": None, "pr_url": None,
         "outcome": None,
     }
@@ -237,6 +253,9 @@ def process_issue(issue, auto_push=True):
     print(output_before)
     result["tests_passed_before"] = passed_before
     record["tests_passed_before"] = passed_before
+    count_p, count_f = _parse_pytest_counts(output_before)
+    record["tests_passed_count_before"] = count_p
+    record["tests_failed_count_before"] = count_f
     if passed_before:
         print("WARNING: tests already pass without the patch — they may not "
               "actually cover the bug. Skipping auto-push for human review.")
@@ -270,6 +289,9 @@ def process_issue(issue, auto_push=True):
     print(output_after)
     result["tests_passed_after"] = passed_after
     record["tests_passed_after"] = passed_after
+    count_p, count_f = _parse_pytest_counts(output_after)
+    record["tests_passed_count_after"] = count_p
+    record["tests_failed_count_after"] = count_f
 
     if not passed_after:
         print("Tests still fail after applying the patch — the fix is not "
