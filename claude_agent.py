@@ -81,6 +81,31 @@ def generate_tests(issue_title, issue_body, patch_diff, context_block):
     return _chat(system_prompt, user_prompt, strip_fences=True)
 
 
+def find_bugs_in_file(file_path, content):
+    """Autonomous discovery: review one source file for real, demonstrable
+    bugs (logic errors, or code that contradicts its own docstring/comments)
+    — not style nits, not hypothetical edge cases, not missing features.
+    High-confidence findings only, since a false positive here files a real
+    GitHub issue and kicks off the whole pipeline."""
+    system_prompt = (
+        "You are a senior software engineer doing a focused bug-hunt on one "
+        "file. Only report a bug if you can point to the exact line and "
+        "explain, with certainty, why the code's actual behavior "
+        "contradicts what it's clearly supposed to do (per its own "
+        "docstring, comments, or unambiguous naming). Do not report style "
+        "issues, missing type hints, missing error handling, hypothetical "
+        "edge cases, or anything you're not fully confident is a genuine "
+        "bug. If you find nothing you're confident about, report zero "
+        "bugs — that is the correct answer for most files. "
+        "Respond with only a JSON object: "
+        '{"bugs": [{"function": "<name>", "title": "<short bug title>", '
+        '"description": "<what\'s wrong and why, one or two sentences>"}]}. '
+        'Use "bugs": [] when there is nothing you are confident about.'
+    )
+    user_prompt = f"File: {file_path}\n\n```\n{content}\n```"
+    return _chat(system_prompt, user_prompt, strip_fences=True)
+
+
 def explain_simply(issue_title, analysis, patch_diff):
     """Plain-language bug + fix summary for a non-technical audience (the
     live dashboard shows this instead of the raw diff/analysis)."""

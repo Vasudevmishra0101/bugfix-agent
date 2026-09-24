@@ -9,6 +9,27 @@ def _tokenize(text):
     return set(re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", text.lower()))
 
 
+def list_source_files(repo_path=".", exclude_tests=True):
+    """All source files under repo_path, for the autonomous scanner (no
+    issue text to search against here — this walks everything)."""
+    files = []
+    for root, dirs, filenames in os.walk(repo_path):
+        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+        for name in filenames:
+            if os.path.splitext(name)[1] not in CODE_EXTENSIONS:
+                continue
+            if exclude_tests and ("test_" in name or name.endswith("_test.py")):
+                continue
+            path = os.path.join(root, name)
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+            except OSError:
+                continue
+            files.append((path, content))
+    return files
+
+
 def find_relevant_files(issue_title, issue_body, repo_path=".", max_files=5):
     """Keyword-overlap search over repo source files. Not RAG/embeddings —
     deliberately simple, good enough at small-repo scale."""

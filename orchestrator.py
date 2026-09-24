@@ -431,7 +431,52 @@ def poll_pr_for_comments(pr, issue, context_block, target_file, test_file_path,
     _run_git(["checkout", "main"])
 
 
-def main():
+def scan_for_bugs(repo_path="."):
+    """Autonomous discovery: read every source file, ask the model whether
+    it's confident there's a real bug in it, and file a GitHub issue for
+    each one found — skipping anything already filed (open or closed) so
+    re-running the scan doesn't spam duplicate issues. Returns the newly
+    created issues; existing issues are left for the normal pipeline to
+    pick up via get_open_issues()."""
+    files = code_context.list_source_files(repo_path)
+    print(f"Scanning {len(files)} source file(s) for bugs...")
+
+    new_issues = []
+    for path, content in files:
+        try:
+            raw = claude_agent.find_bugs_in_file(path, content)
+            found = json.loads(raw).get("bugs", [])
+        except Exception as e:
+            print(f"  {path}: couldn't parse scan result ({e})")
+            continue
+
+        if not found:
+            print(f"  {path}: no confident findings")
+            continue
+
+        for bug in found:
+            title = bug.get("title") or f"Bug in {os.path.basename(path)}"
+            if github_client.find_issue_by_title(title):
+                print(f"  {path}: '{title}' already filed, skipping")
+                continue
+
+            body = (
+                f"Found automatically by PatchPilot's codebase scan.\n\n"
+                f"File: `{path}`\n"
+                f"Function: `{bug.get('function', '?')}`\n\n"
+                f"{bug.get('description', '')}"
+            )
+            issue = github_client.create_bug_issue(title, body)
+            print(f"  {path}: filed issue #{issue.number} — {title}")
+            new_issues.append(issue)
+
+    return new_issues
+
+
+def main(auto_discover=False):
+    if auto_discover:
+        scan_for_bugs()
+
     issues = github_client.get_open_issues(label="bug")
     print(f"Found {len(issues)} open bug issue(s).")
 

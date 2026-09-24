@@ -10,6 +10,23 @@ def get_open_issues(label="bug"):
     return list(_repo.get_issues(state="open", labels=[label]))
 
 
+def find_issue_by_title(title, state="all"):
+    """Guards the autonomous scanner against re-filing the same bug on
+    every run — checks open AND closed issues, since a closed-but-unmerged
+    or already-fixed bug shouldn't be re-reported either."""
+    for issue in _repo.get_issues(state=state):
+        if issue.title.strip().lower() == title.strip().lower():
+            return issue
+    return None
+
+
+def create_bug_issue(title, body, label="bug"):
+    labels = [l.name for l in _repo.get_labels()]
+    if label not in labels:
+        _repo.create_label(name=label, color="d73a4a")
+    return _repo.create_issue(title=title, body=body, labels=[label])
+
+
 def create_branch(branch_name, base_branch="main"):
     base_ref = _repo.get_git_ref(f"heads/{base_branch}")
     _repo.create_git_ref(ref=f"refs/heads/{branch_name}", sha=base_ref.object.sha)
