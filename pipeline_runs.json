@@ -54,5 +54,27 @@
     "plain_bug": "The function treated spaces as part of the text, so phrases like \u201cWas it a car or a cat I saw\u201d were not recognized as palindromes.",
     "plain_fix": "Now the function removes spaces before comparing, so such phrases are correctly recognized as palindromes.",
     "outcome": "pr_opened"
+  },
+  {
+    "issue_number": 7,
+    "issue_title": "Reverses characters instead of words",
+    "started_at": "2026-09-24T14:59:46.994963+00:00",
+    "model": "cohere/north-mini-code:free",
+    "tests_generated": 6,
+    "tests_passed_before": false,
+    "tests_passed_after": true,
+    "tests_passed_count_before": 0,
+    "tests_failed_count_before": 6,
+    "tests_passed_count_after": 6,
+    "tests_failed_count_after": 0,
+    "patch_applied": true,
+    "pr_number": 8,
+    "pr_url": "https://github.com/Vasudevmishra0101/bugfix-agent/pull/8",
+    "pr_state": "open",
+    "pr_merged": false,
+    "review_status": "pending",
+    "plain_bug": "When you used the function, it flipped the whole text backwards, turning \"hello world\" into \"dlrow olleh\" instead of swapping the word order.",
+    "plain_fix": "The fix splits the text into separate words, reverses their order, and then puts them back together, so \"hello world\" now becomes \"world hello\".",
+    "outcome": "pr_opened"
   }
 ]
