@@ -20,6 +20,24 @@ def find_issue_by_title(title, state="all"):
     return None
 
 
+def find_issue_referencing(function_name, title, state="all"):
+    """Looser duplicate check than find_issue_by_title: the scanner writes
+    its own title wording, so an exact-title match misses a bug that's
+    already tracked under different phrasing. This instead checks whether
+    the buggy function's name shows up in any existing issue's title or
+    body, or an exact title match — either counts as already tracked."""
+    fn = (function_name or "").strip().lower()
+    title_norm = title.strip().lower()
+    for issue in _repo.get_issues(state=state):
+        issue_title = (issue.title or "").lower()
+        issue_body = (issue.body or "").lower()
+        if issue_title == title_norm:
+            return issue
+        if fn and len(fn) > 2 and (fn in issue_title or fn in issue_body):
+            return issue
+    return None
+
+
 def create_bug_issue(title, body, label="bug"):
     labels = [l.name for l in _repo.get_labels()]
     if label not in labels:

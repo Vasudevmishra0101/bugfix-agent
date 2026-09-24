@@ -456,8 +456,10 @@ def scan_for_bugs(repo_path="."):
 
         for bug in found:
             title = bug.get("title") or f"Bug in {os.path.basename(path)}"
-            if github_client.find_issue_by_title(title):
-                print(f"  {path}: '{title}' already filed, skipping")
+            function_name = bug.get("function")
+            existing = github_client.find_issue_referencing(function_name, title)
+            if existing:
+                print(f"  {path}: '{title}' already tracked as #{existing.number}, skipping")
                 continue
 
             body = (
