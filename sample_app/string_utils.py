@@ -1,7 +1,7 @@
 def is_palindrome(text):
     """Return True if text reads the same forwards and backwards,
     ignoring case and spaces."""
-    cleaned = text.lower()
+    cleaned = text.lower().replace(" ", "")
     return cleaned == cleaned[::-1]
 
 
