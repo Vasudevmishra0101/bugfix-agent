@@ -14,3 +14,8 @@ def count_vowels(text):
 def title_case(text):
     """Capitalize the first letter of every word in text."""
     return " ".join(word[:1] + word[1:] for word in text.split(" "))
+
+
+def reverse_words(text):
+    """Reverse the order of words in text (not the characters)."""
+    return text[::-1]
