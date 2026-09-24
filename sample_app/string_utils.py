@@ -18,4 +18,5 @@ def title_case(text):
 
 def reverse_words(text):
     """Reverse the order of words in text (not the characters)."""
-    return text[::-1]
+    words = text.split()
+    return " ".join(words[::-1])
